@@ -1,0 +1,7 @@
+node_modules
+database/session
+database/data
+package-lock.json
+.env
+tgm.js
+ai/prompt.js

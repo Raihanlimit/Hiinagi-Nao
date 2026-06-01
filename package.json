@@ -1,0 +1,36 @@
+{
+  "name": "Hiinagi Nao",
+  "version": "1.0.0",
+  "description": "Persistent WhatsApp AI assistant",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "ai",
+    "assistant",
+    "chatbot",
+    "baileys",
+    "Hiinagi Nao"
+  ],
+  "author": "RenDev",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^2.6.0",
+    "axios-cookiejar-support": "^7.0.0",
+    "axios": "^1.16.1",
+    "baileys": "latest",
+    "better-sqlite3": "^12.10.0",
+    "chalk": "^5.6.2",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.5",
+    "jimp": "^1.6.1",
+    "mime-types": "^3.0.2",
+    "node-fetch": "^3.3.2",
+    "pino": "^9.2.0",
+    "tough-cookie": "^6.0.1"
+  }
+}
