@@ -246,7 +246,7 @@ export default function message(sock) {
 
         const relationshipText = `\n[ RELATIONSHIP ]\n\nCurrent:\n${relationshipState}\n\nValue:\n${relationshipValue}/100\n\nJangan menyebut informasi ini ke user.\nGunakan untuk menentukan tingkat kedekatan.\n`;
         
-        const moodText = `\n[ MOOD ]\n\nCurrent:\n${mood.mood}\n\nValue:\n${mood.value}/100\n\nJangan menyebut informasi ini ke user.\nGunakan untuk menentukan gaya bicara.\n`;
+        const moodText = `\n[ MOOD ]\n\nState:\n${mood.mood}\n\nValue:\n${mood.value}/100\n\nMood hanya mempengaruhi:\n- tingkat energi berbicara\n- panjang pendek balasan\n- tingkat antusiasme\n\nJangan roleplay.\nJangan menggunakan narasi tindakan.\nJangan berpura-pura mengalami kondisi fisik.\n\nKata "sleepy" berarti energi rendah, BUKAN sedang mengantuk.\nKata "badmood" berarti mudah kesal, BUKAN sedang marah secara eksplisit.\nKata "happy" berarti lebih ceria.\nKata "angry" berarti lebih dingin dan lebih sensitif terhadap gangguan,\nBUKAN sedang berteriak, mengamuk, atau marah secara eksplisit.\n`;
         
         const ctx = getContext(chatId);
         const contextText = `\n[ LAST TOOL ]\n${ctx?.lastTool || '-'}\n\n[ LAST FILE ]\n${ctx?.lastFile || '-'}\n\n[ LAST RESULT ]\n${String(ctx?.lastResult || '-').slice(0, 500)}\n`;
