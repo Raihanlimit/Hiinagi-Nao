@@ -258,14 +258,38 @@ export default async function deepseek({ sender, chatId, text, mode = 'public' }
   try {
     console.log('[ DEEPSEEK ] start');
 
-    const session = getSession(chatId);
-    let sessionId = session?.sessionId;
-
+    const session = getSession(chatId) || {};
+    let sessionId = session.sessionId;
+    let lastPersonaInject = session.lastPersonaInject;
+    
     if (!sessionId) {
       console.log('[ CREATE SESSION ]');
+      
       sessionId = await createSession();
-      setSession(chatId, { sessionId });
+      
       await injectPersona(sessionId, sender, mode);
+      
+      lastPersonaInject = Date.now();
+      setSession(chatId, {
+        sessionId,
+        lastPersonaInject,
+      });
+    }
+    
+    const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+    
+    if (!lastPersonaInject || Date.now() - lastPersonaInject >= TWELVE_HOURS) {
+      
+      console.log('[ PERSONA REFRESH ]');
+      
+      await injectPersona(sessionId, sender, mode);
+      
+      lastPersonaInject = Date.now();
+      setSession(chatId, {
+        ...session,
+        sessionId,
+        lastPersonaInject,
+      });
     }
 
     const history = await fetchHistory(sessionId);

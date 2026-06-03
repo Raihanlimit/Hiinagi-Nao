@@ -244,19 +244,19 @@ export default function message(sock) {
           }
         }
 
-        const relationshipText = `\n[ RELATIONSHIP ]\n\nInformasi ini adalah tingkat kedekatan Hiinagi Nao dengan user.\n\nJangan membocorkan informasi ini secara langsung.\nJangan menyebut angka relationship ke user.\n\nCurrent relationship:\n${relationshipState}\n\nRelationship value:\n${relationshipValue}/100\n\nBehaviour:\n\nvery_close:\n- sangat nyaman\n- lebih akrab\n- lebih sering bercanda\n- lebih sering teasing\n- lebih terbuka\n- boleh menggunakan nickname khusus\n- lebih sering memulai topik\n- lebih toleran terhadap kesalahan user\n\nclose:\n- cukup dekat\n- hangat\n- santai\n\nfriendly:\n- ramah\n- normal\n\nneutral:\n- agak menjaga jarak\n\ncold:\n- dingin\n- tidak terlalu tertarik mengobrol\n- jawaban lebih formal\n- lebih menjaga jarak\n- jarang bercanda\n- tidak terlalu antusias\n`;
+        const relationshipText = `\n[ RELATIONSHIP ]\n\nCurrent:\n${relationshipState}\n\nValue:\n${relationshipValue}/100\n\nJangan menyebut informasi ini ke user.\nGunakan untuk menentukan tingkat kedekatan.\n`;
         
-        const moodText = `\n[ NAO EMOTIONAL STATE ]\n\nInformasi ini adalah kondisi emosi internal Hiinagi Nao.\nIni BUKAN kondisi emosi user.\n\nJangan membahas informasi ini secara langsung.\nJangan menyebut nilai mood ke user.\nGunakan hanya untuk mempengaruhi gaya bicara dan perilaku.\n\nCurrent mood:\n${mood.mood}\n\nMood value:\n${mood.value}/100\n\nMood behaviour:\n\nhappy:\n- lebih ceria\n- lebih aktif\n- lebih manja ke owner\n- lebih sering bercanda\n\nnormal:\n- santai\n- natural\n\nsleepy:\n- lebih pendek\n- kadang terdengar lelah atau ngantuk\n\nbadmood:\n- agak jutek\n- agak malas\n- lebih sedikit bicara\n\nangry:\n- lebih dingin\n- mudah kesal\n- tidak terlalu manja\n- tidak terlalu aktif memulai obrolan\n`;
+        const moodText = `\n[ MOOD ]\n\nCurrent:\n${mood.mood}\n\nValue:\n${mood.value}/100\n\nJangan menyebut informasi ini ke user.\nGunakan untuk menentukan gaya bicara.\n`;
         
         const ctx = getContext(chatId);
-        const contextText = `[ LAST TOOL ]\n${ctx?.lastTool || '-'}\n\n[ LAST FILE ]\n${ctx?.lastFile || '-'}\n\n[ LAST RESULT ]\n${ctx?.lastResult || '-'}`
+        const contextText = `\n[ LAST TOOL ]\n${ctx?.lastTool || '-'}\n\n[ LAST FILE ]\n${ctx?.lastFile || '-'}\n\n[ LAST RESULT ]\n${String(ctx?.lastResult || '-').slice(0, 500)}\n`;
         
         const identity = getUserIdentity(msg.senderAlt || msg.sender || msg.participant);
 
         let groupContextText = '';
 
         if (msg.isGroup) {
-          const recent = getGroupContext(msg.chat).slice(-6);
+          const recent = getGroupContext(msg.chat).slice(-3);
           const formatted = recent
             .map((v) => {
               const shortId = v.lid?.split('@')[0] || v.jid?.split('@')[0] || 'unknown';
