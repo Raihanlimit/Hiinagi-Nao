@@ -5,3 +5,5 @@ package-lock.json
 .env
 tgm.js
 ai/prompt.js
+nao.js
+tesoai.js

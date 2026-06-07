@@ -1,3 +1,4 @@
+import fs from 'fs';
 import parseMessage from '../tools/message.js';
 import behavior from '../system/behavior.js';
 import gemini from '../ai/gemini.js';
@@ -15,6 +16,11 @@ import { pushGroupContext, getGroupContext } from '../system/group-context.js';
 import { getUserIdentity } from '../tools/user.js';
 import { updateMood } from '../system/mood.js';
 import { getSpecialEvent } from '../system/event.js';
+import { detectPhotoIntent } from '../system/photo-intent.js';
+import { generatePhotoReply } from '../ai/nao-reply.js';
+import { generateNaoImage } from '../ai/nao-image.js';
+import { generatePhotoCaption } from '../ai/nao-caption.js';
+import { getPhotoPeriod, canReusePhoto } from '../system/photo-session.js';
 
 const messageCache = new Set();
 
@@ -29,6 +35,7 @@ export default function message(sock) {
         if (messageCache.has(msgId)) {
           continue;
         }
+
         messageCache.add(msgId);
         setTimeout(() => {
           messageCache.delete(msgId);
@@ -36,12 +43,12 @@ export default function message(sock) {
 
         const msg = await parseMessage(sock, m);
 
-        if (!msg?.body && !msg.media?.isMedia && !msg.quoted?.media?.isMedia)
-        continue;
+        if (!msg?.body && !msg.media?.isMedia && !msg.quoted?.media?.isMedia) {
+          continue;
+        }
 
         if (msg.isGroup) {
           const ids = [msg.sender, msg.participant, msg.senderAlt].filter(Boolean);
-
           const jid = ids.find((v) => v.includes('@s.whatsapp.net')) || null;
           const lid = ids.find((v) => v.includes('@lid')) || null;
 
@@ -59,12 +66,14 @@ export default function message(sock) {
         const modeData = getMode();
         const mode = modeData.current;
         const allowed = modeData.custom || [];
+
         if (mode === 'self' && !owner) {
           continue;
         }
+
         if (mode === 'custom') {
           const ids = [msg.chat, msg.sender, msg.senderAlt, msg.participant].filter(Boolean);
-          const allowedHere = ids.some(id => allowed.includes(id));
+          const allowedHere = ids.some((id) => allowed.includes(id));
           if (!allowedHere && !owner) {
             continue;
           }
@@ -196,6 +205,96 @@ export default function message(sock) {
         const relationshipState = mood.relationshipState;
         const relationshipValue = mood.relationship;
         const specialEventText = getSpecialEvent(owner);
+
+        const photoIntent = detectPhotoIntent({
+          text: cleanedBody,
+          mood: mood.mood,
+        });
+
+        if (photoIntent) {
+          console.log('[PHOTO TARGET]', photoIntent.target);
+
+          const photoCtx = getContext(chatId);
+          const target = photoIntent.target || (photoCtx?.lastPhotoTarget === 'nao'
+          ? 'nao'
+          : null);
+          if (!target) {
+            return sock.sendMessage(msg.chat, { text: 'foto yang mana? 😒' });
+            continue;
+          }
+          const photoReply = await generatePhotoReply({
+            action: photoIntent.action,
+            target,
+            mood: mood.mood,
+            relationship: relationshipState,
+            owner,
+            context: cleanedBody,
+          });
+
+          await sock.sendMessage(
+            msg.chat,
+            { text: photoReply },
+            msg.isGroup ? { quoted: m } : {}
+          );
+
+          if (photoIntent.action === 'reject') {
+            continue;
+          }
+
+          try {
+            let referenceImage = null;
+
+            console.log('[PHOTO PERIOD]', {
+              current: getPhotoPeriod(),
+              saved: photoCtx?.lastPhotoPeriod || null
+            });
+            if (target === 'nao' && photoCtx?.lastPhotoFile && fs.existsSync(photoCtx.lastPhotoFile) && canReusePhoto(photoCtx)) {
+              referenceImage = photoCtx.lastPhotoFile;
+            }
+
+            console.log('[REFERENCE IMAGE]', referenceImage || 'DEFAULT');
+            const media = await generateNaoImage({
+              target,
+              mood: mood.mood,
+              owner,
+              instruction: cleanedBody,
+              referenceImage,
+              previousPrompt: photoCtx?.lastPhotoPrompt || ''
+            });
+
+            const caption = await generatePhotoCaption({
+              target: target,
+              mood: mood.mood,
+              relationship: relationshipState,
+              owner,
+              context: cleanedBody,
+            });
+
+            await sock.sendMessage(msg.chat, {
+              image: { url: media.image },
+              caption,
+              viewOnce: media.viewOnce,
+            });
+
+            setContext(chatId, {
+              lastPhotoTarget: media.target,
+              lastPhotoCaption: caption,
+              lastPhotoFile: media.image,
+              lastPhotoPrompt: media.prompt,
+              lastPhotoPeriod: getPhotoPeriod(),
+              lastPhotoDescription:
+                media.target === 'nao'
+                  ? `foto Hiinagi Nao. Request: ${cleanedBody.slice(0, 120)}. Caption: ${caption}`
+                  : `foto ${media.target}. Request: ${cleanedBody.slice(0, 120)}. Caption: ${caption}`,
+              lastPhotoTime: Date.now(),
+            });
+          } catch (err) {
+            logError('PHOTO ERROR', err);
+          }
+
+          continue;
+        }
+
         let usedTool = null;
 
         if (owner && mode === 'developer') {
@@ -244,19 +343,22 @@ export default function message(sock) {
           }
         }
 
-        const relationshipText = `\n[ RELATIONSHIP ]\n\nCurrent:\n${relationshipState}\n\nValue:\n${relationshipValue}/100\n\nJangan menyebut informasi ini ke user.\nGunakan untuk menentukan tingkat kedekatan.\n`;
-        
-        const moodText = `\n[ MOOD ]\n\nState:\n${mood.mood}\n\nValue:\n${mood.value}/100\n\nMood hanya mempengaruhi:\n- tingkat energi berbicara\n- panjang pendek balasan\n- tingkat antusiasme\n\nJangan roleplay.\nJangan menggunakan narasi tindakan.\nJangan berpura-pura mengalami kondisi fisik.\n\nKata "sleepy" berarti energi rendah, BUKAN sedang mengantuk.\nKata "badmood" berarti mudah kesal, BUKAN sedang marah secara eksplisit.\nKata "happy" berarti lebih ceria.\nKata "angry" berarti lebih dingin dan lebih sensitif terhadap gangguan,\nBUKAN sedang berteriak, mengamuk, atau marah secara eksplisit.\n`;
-        
         const ctx = getContext(chatId);
-        const contextText = `\n[ LAST TOOL ]\n${ctx?.lastTool || '-'}\n\n[ LAST FILE ]\n${ctx?.lastFile || '-'}\n\n[ LAST RESULT ]\n${String(ctx?.lastResult || '-').slice(0, 500)}\n`;
-        
+        const photoText = ctx?.lastPhotoDescription
+          ? `\n[ LAST PHOTO ]\n${ctx.lastPhotoDescription}\n\n[ LAST PHOTO CAPTION ]\n${ctx.lastPhotoCaption || '-'}\n`
+          : '';
+
+        const contextText = `[ LAST TOOL ]\n${ctx?.lastTool || '-'}\n\n[ LAST FILE ]\n${ctx?.lastFile || '-'}\n\n[ LAST RESULT ]\n${ctx?.lastResult || '-'}\n${photoText}`;
+
+        const relationshipText = `\n[ RELATIONSHIP ]\n\nInformasi ini adalah tingkat kedekatan Hiinagi Nao dengan user.\n\nJangan membocorkan informasi ini secara langsung.\nJangan menyebut angka relationship ke user.\n\nCurrent relationship:\n${relationshipState}\n\nRelationship value:\n${relationshipValue}/100\n\nBehaviour:\n\nvery_close:\n- sangat nyaman\n- lebih akrab\n- lebih sering bercanda\n- lebih sering teasing\n- lebih terbuka\n- boleh menggunakan nickname khusus\n- lebih sering memulai topik\n- lebih toleran terhadap kesalahan user\n\nclose:\n- cukup dekat\n- hangat\n- santai\n\nfriendly:\n- ramah\n- normal\n\nneutral:\n- agak menjaga jarak\n\ncold:\n- dingin\n- tidak terlalu tertarik mengobrol\n- jawaban lebih formal\n- lebih menjaga jarak\n- jarang bercanda\n- tidak terlalu antusias\n`;
+        const moodText = `\n[ NAO EMOTIONAL STATE ]\n\nInformasi ini adalah kondisi emosi internal Hiinagi Nao.\nIni BUKAN kondisi emosi user.\n\nJangan membahas informasi ini secara langsung.\nJangan menyebut nilai mood ke user.\nGunakan hanya untuk mempengaruhi gaya bicara dan perilaku.\n\nCurrent mood:\n${mood.mood}\n\nMood value:\n${mood.value}/100\n\nMood behaviour:\n\nhappy:\n- lebih ceria\n- lebih aktif\n- lebih manja ke owner\n- lebih sering bercanda\n\nnormal:\n- santai\n- natural\n\nsleepy:\n- lebih pendek\n- kadang terdengar lelah atau ngantuk\n\nbadmood:\n- agak jutek\n- agak malas\n- lebih sedikit bicara\n\nangry:\n- lebih dingin\n- mudah kesal\n- tidak terlalu manja\n- tidak terlalu aktif memulai obrolan\n`;
+
         const identity = getUserIdentity(msg.senderAlt || msg.sender || msg.participant);
 
         let groupContextText = '';
 
         if (msg.isGroup) {
-          const recent = getGroupContext(msg.chat).slice(-3);
+          const recent = getGroupContext(msg.chat).slice(-6);
           const formatted = recent
             .map((v) => {
               const shortId = v.lid?.split('@')[0] || v.jid?.split('@')[0] || 'unknown';
@@ -279,29 +381,26 @@ export default function message(sock) {
 
         try {
           let enhancedText = finalText;
-          
-          const activeMedia = msg.media?.isMedia ? msg.media : msg.quoted?.media?.isMedia ? msg.quoted.media : null
+
+          const activeMedia = msg.media?.isMedia ? msg.media : msg.quoted?.media?.isMedia ? msg.quoted.media : null;
 
           if (activeMedia?.isMedia) {
             if (activeMedia?.text) {
               enhancedText += `\n\n[ FILE CONTENT ]\n${activeMedia.text.slice(0, 15000)}\n`;
             } else if (activeMedia?.base64) {
-              let mediaPrompt = cleanedBody || ''
-              const lower = mediaPrompt.toLowerCase()
+              let mediaPrompt = cleanedBody || '';
+              const lower = mediaPrompt.toLowerCase();
+
               if (lower.includes('siapa') || lower.includes('karakter') || lower.includes('cosplay') || lower.includes('anime') || lower.includes('game') || lower.includes('char')) {
-                mediaPrompt = `\nidentifikasi karakter anime, game, atau cosplay pada gambar ini.\n\nkalau tidak yakin gunakan kata:\n- mungkin\n- terlihat seperti\n- bisa jadi\n\njelaskan alasan visualnya.`
-              }
-              else if (activeMedia.category === 'image') {
-                mediaPrompt = 'jelaskan gambar ini secara detail'
-              }
-              else if (activeMedia.category === 'audio') {
-                mediaPrompt = 'transkrip dan jelaskan isi audio ini'
-              }
-              else if (activeMedia.category === 'video') {
-                mediaPrompt = 'jelaskan isi video ini secara detail'
-              }
-              else if (activeMedia.category === 'document') {
-                mediaPrompt = 'analisa dokumen ini'
+                mediaPrompt = `\nidentifikasi karakter anime, game, atau cosplay pada gambar ini.\n\nkalau tidak yakin gunakan kata:\n- mungkin\n- terlihat seperti\n- bisa jadi\n\njelaskan alasan visualnya.`;
+              } else if (activeMedia.category === 'image') {
+                mediaPrompt = 'jelaskan gambar ini secara detail';
+              } else if (activeMedia.category === 'audio') {
+                mediaPrompt = 'transkrip dan jelaskan isi audio ini';
+              } else if (activeMedia.category === 'video') {
+                mediaPrompt = 'jelaskan isi video ini secara detail';
+              } else if (activeMedia.category === 'document') {
+                mediaPrompt = 'analisa dokumen ini';
               }
 
               const vision = await gemini({
@@ -316,7 +415,7 @@ export default function message(sock) {
           }
 
           console.log('[MOOD]', chatId, mood.mood, mood.value);
-          
+
           ai = await deepseek({
             sender: msg.senderAlt,
             chatId,

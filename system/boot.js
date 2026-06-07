@@ -3,11 +3,14 @@ import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } from '
 import connection from '../events/connection.js';
 import message from '../events/message.js';
 import { initDeepSeek } from '../ai/deepseek.js';
+import { startScheduler } from './scheduler.js';
 
 const logger = pino({ level: 'silent' });
 
 export default async function start() {
     await initDeepSeek();
+
+    startScheduler();
 
     const { state, saveCreds } = await useMultiFileAuthState('./database/session');
     const { version } = await fetchLatestBaileysVersion();
